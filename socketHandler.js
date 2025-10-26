@@ -1,22 +1,29 @@
 
-// // server-side: socketHandler.js
-
 // import Message from "./models/Message.js";
 // import User from "./models/User.js";
 // import Group from "./models/Group.js";
 // import Wallpaper from "./models/Wallpaper.js";
+// import Share from "./models/Share.js";
 // import Post from "./models/Post.js"; // ADDED
-
-
-
 // import { verifySocketToken } from "./middlewares/auth-middleware.js";
-// import mongoose from "mongoose";
+// import mongoose from "mongoose"
 
-// const onlineUsers = new Map();
-// const tempToRealMap = new Map();
+// // import { verifySocketToken } from "../middlewares/auth-middleware.js";
 
-// // Helper functions
-// const isTempId = (id) => typeof id === 'string' && id.startsWith('temp-');
+// const onlineUsers = new Map();      // userId => Set(socketIds)
+// const tempToRealMap = new Map();   // clientTempId => realId
+
+// // Helpers
+// const isTempId = (id) => typeof id === "string" && id.startsWith("temp-");
+
+// const validateUser = async (userId) => {
+//   try {
+//     if (!mongoose.Types.ObjectId.isValid(userId)) return null;
+//     return await User.findById(userId);
+//   } catch (err) {
+//     return null;
+//   }
+// };
 
 // const buildChatList = async (uid) => {
 //   console.log(`🔍 [buildChatList] Building chat list for user: ${uid}`);
@@ -24,17 +31,16 @@
 //     const messages = await Message.find({
 //       $or: [{ sender: uid }, { receiver: uid }],
 //       deletedFor: { $ne: uid },
-//       deletedForEveryone: { $ne: true }
+//       deletedForEveryone: { $ne: true },
 //     })
-//     .sort({ createdAt: -1 })
-//     .limit(500)
-//     .lean();
+//       .sort({ createdAt: -1 })
+//       .limit(500)
+//       .lean();
 
 //     const map = new Map();
-    
+
 //     for (const msg of messages) {
 //       const friendId = String(msg.sender) === String(uid) ? String(msg.receiver) : String(msg.sender);
-
 //       if (!friendId || friendId === uid) continue;
 
 //       if (!map.has(friendId)) {
@@ -54,18 +60,8 @@
 //   }
 // };
 
-// const validateUser = async (userId) => {
-//   try {
-//     return await User.findById(userId);
-//   } catch (error) {
-//     return null;
-//   }
-// };
-
 // const socketHandler = (io) => {
-//   // =========================
-//   // AUTH MIDDLEWARE
-//   // =========================
+//   // AUTH middleware for sockets
 //   io.use(async (socket, next) => {
 //     try {
 //       const token = socket.handshake.auth?.token;
@@ -82,24 +78,24 @@
 
 //       socket.user = { _id: String(user._id), username: user.username };
 //       console.log(`✅ [Auth] User authenticated: ${socket.user._id} (${socket.user.username})`);
-//       next();
+//       return next();
 //     } catch (err) {
-//       console.error("❌ [Auth] Error:", err.message);
-//       next(new Error("Unauthorized"));
+//       console.error("❌ [Auth] Error:", err?.message || err);
+//       return next(new Error("Unauthorized"));
 //     }
 //   });
 
-//   // =========================
-//   // CONNECTION
-//   // =========================
+//   // On connection
 //   io.on("connection", async (socket) => {
 //     const userId = socket.user._id;
 //     const username = socket.user.username;
-//     console.log(`🟢 [Connection] User connected: ${userId} (${username})`);
+//     console.log(`🟢 [Connection] User connected: ${userId} (${username}) socket:${socket.id}`);
 
-//     // Setup user connection
+//     // Register online socket
 //     if (!onlineUsers.has(userId)) onlineUsers.set(userId, new Set());
 //     onlineUsers.get(userId).add(socket.id);
+
+//     // Join room by userId so we can emit to the user easily
 //     socket.join(userId);
 
 //     try {
@@ -109,41 +105,38 @@
 //       console.error(`❌ [Connection] Error marking online:`, error);
 //     }
 
-//     // =========================
-//     // POST EVENTS - NEWLY ADDED
-//     // =========================
-
-//     socket.on("createPost", async ({ caption, location, image, tempId }) => {
-//       console.log(`📸 [createPost] User ${userId} creating post`);
-      
+//     // -------------------------
+//     // POST EVENTS
+//     // -------------------------
+//    socket.on("createPost", async ({ caption, location, image, tempId }) => {
+//       console.log(`📸 [createPost] ${username} creating post`);
 //       try {
-//         if (!caption) {
+//         if (!caption?.trim()) {
 //           return io.to(socket.id).emit("post-error", { tempId, error: "Caption is required" });
 //         }
 
-//         // Create post
+//         // Ensure image is relative path, not base64
+//         if (image && image.startsWith("data:")) {
+//           return io.to(socket.id).emit("post-error", { tempId, error: "Invalid image format. Use /uploads path." });
+//         }
+
 //         const post = await Post.create({
 //           owner: userId,
-//           caption,
+//           caption: caption.trim(),
 //           location: location || "",
-//           image: image || null,
+//           image: image || null, // e.g., "/uploads/abc123.png"
 //         });
 
-//         // Populate owner info
-//         await post.populate('owner', 'username profilePic');
+//         await post.populate("owner", "username profilePic");
 
-//         // Increment user posts count
-//         await User.findByIdAndUpdate(
-//           userId,
-//           { $inc: { postsCount: 1 } }
-//         );
+//         await User.findByIdAndUpdate(userId, { $inc: { postsCount: 1 } });
 
 //         const postData = {
 //           id: post._id.toString(),
 //           user: {
 //             id: post.owner._id.toString(),
 //             username: post.owner.username,
-//             avatar: post.owner.profilePic
+//             avatar: post.owner.profilePic,
 //           },
 //           image: post.image,
 //           caption: post.caption,
@@ -152,14 +145,13 @@
 //           liked: false,
 //           comments: [],
 //           createdAt: post.createdAt,
-//           _temp: false
+//           _temp: false,
 //         };
 
-//         if (tempId) {
+//         if (tempId && isTempId(tempId)) {
 //           tempToRealMap.set(tempId, post._id.toString());
 //         }
 
-//         // Emit to all connected users (like Instagram feed)
 //         io.emit("newPost", postData);
 //         io.to(socket.id).emit("post-created", { tempId, realId: post._id.toString() });
 
@@ -172,7 +164,6 @@
 
 //     socket.on("likePost", async ({ postId, userId: likerId }) => {
 //       console.log(`❤️ [likePost] User ${likerId} liking post ${postId}`);
-      
 //       try {
 //         if (!mongoose.Types.ObjectId.isValid(postId)) {
 //           return io.to(socket.id).emit("like-error", { postId, error: "Invalid post ID" });
@@ -183,43 +174,33 @@
 //           return io.to(socket.id).emit("like-error", { postId, error: "Post not found" });
 //         }
 
-//         const isLiked = post.likes.some(like => 
+//         const isLiked = post.likes.some((like) =>
 //           like._id ? like._id.toString() === likerId : like.toString() === likerId
 //         );
 
 //         let updatedPost;
 //         if (isLiked) {
-//           // Unlike post
 //           updatedPost = await Post.findByIdAndUpdate(
 //             postId,
-//             { 
-//               $pull: { likes: likerId },
-//               $inc: { likesCount: -1 }
-//             },
+//             { $pull: { likes: likerId }, $inc: { likesCount: -1 } },
 //             { new: true }
-//           ).populate('owner', 'username profilePic');
+//           ).populate("owner", "username profilePic");
 //         } else {
-//           // Like post
 //           updatedPost = await Post.findByIdAndUpdate(
 //             postId,
-//             { 
-//               $addToSet: { likes: likerId },
-//               $inc: { likesCount: 1 }
-//             },
+//             { $addToSet: { likes: likerId }, $inc: { likesCount: 1 } },
 //             { new: true }
-//           ).populate('owner', 'username profilePic');
+//           ).populate("owner", "username profilePic");
 //         }
 
 //         const likeData = {
 //           postId,
 //           likesCount: updatedPost.likesCount,
 //           likedBy: updatedPost.likes,
-//           liked: !isLiked
+//           liked: !isLiked,
 //         };
 
-//         // Emit to all connected users
 //         io.emit("postLiked", likeData);
-
 //         console.log(`✅ [likePost] Post ${postId} liked by ${likerId}, likes: ${updatedPost.likesCount}`);
 //       } catch (err) {
 //         console.error("❌ [likePost] ERROR:", err);
@@ -229,13 +210,11 @@
 
 //     socket.on("commentOnPost", async ({ postId, comment, tempId }) => {
 //       console.log(`💬 [commentOnPost] User ${userId} commenting on post ${postId}`);
-      
 //       try {
 //         if (!mongoose.Types.ObjectId.isValid(postId)) {
 //           return io.to(socket.id).emit("comment-error", { tempId, error: "Invalid post ID" });
 //         }
-
-//         if (!comment || comment.trim() === '') {
+//         if (!comment || comment.trim() === "") {
 //           return io.to(socket.id).emit("comment-error", { tempId, error: "Comment text is required" });
 //         }
 
@@ -247,18 +226,16 @@
 //         const newComment = {
 //           user: userId,
 //           text: comment.trim(),
-//           createdAt: new Date()
+//           createdAt: new Date(),
 //         };
 
 //         const updatedPost = await Post.findByIdAndUpdate(
 //           postId,
-//           { 
-//             $push: { comments: newComment },
-//             $inc: { commentsCount: 1 }
-//           },
+//           { $push: { comments: newComment }, $inc: { commentsCount: 1 } },
 //           { new: true }
-//         ).populate('owner', 'username profilePic')
-//          .populate('comments.user', 'username profilePic');
+//         )
+//           .populate("owner", "username profilePic")
+//           .populate("comments.user", "username profilePic");
 
 //         const addedComment = updatedPost.comments[updatedPost.comments.length - 1];
 
@@ -266,26 +243,18 @@
 //           id: addedComment._id.toString(),
 //           user: {
 //             id: addedComment.user._id.toString(),
-//             username: addedComment.user.username
+//             username: addedComment.user.username,
 //           },
 //           text: addedComment.text,
-//           createdAt: addedComment.createdAt
+//           createdAt: addedComment.createdAt,
 //         };
 
-//         if (tempId) {
+//         if (tempId && isTempId(tempId)) {
 //           tempToRealMap.set(tempId, addedComment._id.toString());
 //         }
 
-//         // Emit to all connected users
-//         io.emit("postCommented", {
-//           postId,
-//           comment: commentData
-//         });
-
-//         io.to(socket.id).emit("comment-added", { 
-//           tempId, 
-//           realId: addedComment._id.toString() 
-//         });
+//         io.emit("postCommented", { postId, comment: commentData });
+//         io.to(socket.id).emit("comment-added", { tempId, realId: addedComment._id.toString() });
 
 //         console.log(`✅ [commentOnPost] Comment added to post ${postId} by ${userId}`);
 //       } catch (err) {
@@ -296,7 +265,6 @@
 
 //     socket.on("deletePost", async ({ postId }) => {
 //       console.log(`🗑️ [deletePost] User ${userId} deleting post ${postId}`);
-      
 //       try {
 //         if (!mongoose.Types.ObjectId.isValid(postId)) {
 //           return io.to(socket.id).emit("delete-post-error", { postId, error: "Invalid post ID" });
@@ -307,22 +275,14 @@
 //           return io.to(socket.id).emit("delete-post-error", { postId, error: "Post not found" });
 //         }
 
-//         // Check if user owns the post
 //         if (post.owner.toString() !== userId) {
 //           return io.to(socket.id).emit("delete-post-error", { postId, error: "Not authorized to delete this post" });
 //         }
 
 //         await Post.findByIdAndDelete(postId);
+//         await User.findByIdAndUpdate(userId, { $inc: { postsCount: -1 } });
 
-//         // Decrement user posts count
-//         await User.findByIdAndUpdate(
-//           userId,
-//           { $inc: { postsCount: -1 } }
-//         );
-
-//         // Emit to all connected users
 //         io.emit("postDeleted", postId);
-
 //         console.log(`✅ [deletePost] Post ${postId} deleted by ${userId}`);
 //       } catch (err) {
 //         console.error("❌ [deletePost] ERROR:", err);
@@ -332,7 +292,6 @@
 
 //     socket.on("deleteComment", async ({ postId, commentId }) => {
 //       console.log(`🗑️ [deleteComment] User ${userId} deleting comment ${commentId} from post ${postId}`);
-      
 //       try {
 //         if (!mongoose.Types.ObjectId.isValid(postId) || !mongoose.Types.ObjectId.isValid(commentId)) {
 //           return io.to(socket.id).emit("delete-comment-error", { commentId, error: "Invalid post ID or comment ID" });
@@ -348,25 +307,13 @@
 //           return io.to(socket.id).emit("delete-comment-error", { commentId, error: "Comment not found" });
 //         }
 
-//         // Check if user owns the comment or the post
 //         if (comment.user.toString() !== userId && post.owner.toString() !== userId) {
 //           return io.to(socket.id).emit("delete-comment-error", { commentId, error: "Not authorized to delete this comment" });
 //         }
 
-//         await Post.findByIdAndUpdate(
-//           postId,
-//           { 
-//             $pull: { comments: { _id: commentId } },
-//             $inc: { commentsCount: -1 }
-//           }
-//         );
+//         await Post.findByIdAndUpdate(postId, { $pull: { comments: { _id: commentId } }, $inc: { commentsCount: -1 } });
 
-//         // Emit to all connected users
-//         io.emit("commentDeleted", {
-//           postId,
-//           commentId
-//         });
-
+//         io.emit("commentDeleted", { postId, commentId });
 //         console.log(`✅ [deleteComment] Comment ${commentId} deleted from post ${postId}`);
 //       } catch (err) {
 //         console.error("❌ [deleteComment] ERROR:", err);
@@ -374,10 +321,9 @@
 //       }
 //     });
 
-//     // =========================
+//     // -------------------------
 //     // 1-1 CHAT EVENTS
-//     // =========================
-
+//     // -------------------------
 //     socket.on("fetch-chatlist", async () => {
 //       console.log(`📋 [fetch-chatlist] Request from: ${userId}`);
 //       try {
@@ -390,16 +336,13 @@
 
 //     socket.on("send-message", async ({ receiver, content, image, tempId, replyTo }) => {
 //       console.log(`📤 [send-message] From ${userId} to ${receiver}`);
-      
 //       if (!receiver) {
 //         return io.to(socket.id).emit("message-error", { tempId, error: "No receiver specified" });
 //       }
-
 //       if (receiver === userId) {
 //         return io.to(socket.id).emit("message-error", { tempId, error: "Cannot send message to yourself" });
 //       }
-
-//       if (!await validateUser(receiver)) {
+//       if (!(await validateUser(receiver))) {
 //         return io.to(socket.id).emit("message-error", { tempId, error: "Receiver not found" });
 //       }
 
@@ -421,13 +364,10 @@
 //         await msg.populate("receiver", "username");
 //         if (msgData.replyTo) await msg.populate("replyTo");
 
-//         if (tempId) {
-//           tempToRealMap.set(tempId, msg._id.toString());
-//         }
+//         if (tempId && isTempId(tempId)) tempToRealMap.set(tempId, msg._id.toString());
 
 //         const messageToEmit = { message: msg, tempId, realId: msg._id.toString() };
 
-//         // Emit to both users
 //         io.to(userId).emit("new-message", messageToEmit);
 //         io.to(receiver).emit("new-message", messageToEmit);
 //         io.to(socket.id).emit("message-sent", { tempId, realId: msg._id });
@@ -439,32 +379,19 @@
 //       }
 //     });
 
-//     // =========================
+//     // -------------------------
 //     // WALLPAPER EVENTS
-//     // =========================
-
+//     // -------------------------
 //     socket.on("chat/wallpaper", async ({ friendId, wallpaper }) => {
 //       console.log(`🎨 [chat/wallpaper] User ${userId} setting wallpaper for chat with ${friendId}`);
-      
 //       try {
-//         if (!friendId) {
-//           return io.to(socket.id).emit("wallpaper-error", { error: "Friend ID is required" });
-//         }
+//         if (!friendId) return io.to(socket.id).emit("wallpaper-error", { error: "Friend ID is required" });
 
-//         // Validate friend exists
 //         const friend = await User.findById(friendId);
-//         if (!friend) {
-//           return io.to(socket.id).emit("wallpaper-error", { error: "Friend not found" });
-//         }
+//         if (!friend) return io.to(socket.id).emit("wallpaper-error", { error: "Friend not found" });
 
-//         // Upsert wallpaper setting
-//         await Wallpaper.findOneAndUpdate(
-//           { userId, friendId },
-//           { wallpaper, updatedAt: new Date() },
-//           { upsert: true, new: true }
-//         );
+//         await Wallpaper.findOneAndUpdate({ userId, friendId }, { wallpaper, updatedAt: new Date() }, { upsert: true, new: true });
 
-//         // Notify both users
 //         io.to(userId).emit("chat-wallpaper-updated", { friendId, wallpaper });
 //         io.to(friendId).emit("chat-wallpaper-updated", { friendId: userId, wallpaper });
 
@@ -475,16 +402,76 @@
 //       }
 //     });
 
-//     // ... (rest of your existing chat and group events remain the same)
+//     // -------------------------
+//     // SHARE EVENTS (send_share)
+//     // Saves Share in DB and emits to receiver in real-time
+//     // -------------------------
+//     socket.on("join_user", (joinId) => {
+//       // Allow clients to explicitly join rooms (optional)
+//       try {
+//         if (!joinId) return;
+//         socket.join(joinId);
+//         console.log(`🔗 [join_user] socket ${socket.id} joined room ${joinId}`);
+//       } catch (err) {
+//         console.error("❌ [join_user] ERROR:", err);
+//       }
+//     });
 
-//     // =========================
-//     // DISCONNECT
-//     // =========================
+//     socket.on("send_share", async (data) => {
+//       console.log(`🔁 [send_share] Received from ${userId}:`, data);
+//       try {
+//         const { senderId, receiverId, postId, message } = data;
+
+//         if (!senderId || !receiverId || !postId) {
+//           return io.to(socket.id).emit("share-error", { error: "senderId, receiverId and postId required" });
+//         }
+
+//         if (!mongoose.Types.ObjectId.isValid(senderId) || !mongoose.Types.ObjectId.isValid(receiverId) || !mongoose.Types.ObjectId.isValid(postId)) {
+//           return io.to(socket.id).emit("share-error", { error: "Invalid IDs provided" });
+//         }
+
+//         if (!(await validateUser(senderId)) || !(await validateUser(receiverId))) {
+//           return io.to(socket.id).emit("share-error", { error: "Sender or receiver not found" });
+//         }
+
+//         const post = await Post.findById(postId).select("_id caption image owner");
+//         if (!post) {
+//           return io.to(socket.id).emit("share-error", { error: "Post not found" });
+//         }
+
+//         const link = `${process.env.APP_URL?.replace(/\/$/, "") || ""}/post/${postId}`;
+
+//         const shareDoc = await Share.create({
+//           sender: senderId,
+//           receiver: receiverId,
+//           post: postId,
+//           message: message || "",
+//           link,
+//         });
+
+//         // populate minimal fields for real-time payload
+//         await shareDoc.populate("sender", "username profilePic");
+//         await shareDoc.populate("post", "caption image");
+
+//         // Emit to receiver room (and to receiver sockets)
+//         io.to(receiverId).emit("receive_share", shareDoc);
+
+//         // Acknowledge sender
+//         io.to(socket.id).emit("share_sent", { share: shareDoc });
+
+//         console.log(`✅ [send_share] Share saved ${shareDoc._id} from ${senderId} -> ${receiverId}`);
+//       } catch (err) {
+//         console.error("❌ [send_share] ERROR:", err);
+//         io.to(socket.id).emit("share-error", { error: err.message || "Server error" });
+//       }
+//     });
+
+//     // Disconnect handling
 //     socket.on("disconnect", async () => {
-//       console.log(`🔴 [Disconnect] User disconnected: ${userId}`);
+//       console.log(`🔴 [Disconnect] Socket disconnected: ${socket.id} for user ${userId}`);
 //       try {
 //         onlineUsers.get(userId)?.delete(socket.id);
-//         if (!onlineUsers.get(userId)?.size) {
+//         if (!onlineUsers.get(userId) || onlineUsers.get(userId).size === 0) {
 //           onlineUsers.delete(userId);
 //           await User.findByIdAndUpdate(userId, { isOnline: false, lastActive: new Date() });
 //           io.emit("user-status", { userId, isOnline: false });
@@ -495,26 +482,10 @@
 //     });
 //   });
 
-//   console.log(`🎯 Socket handler initialized successfully with POST events`);
+//   console.log(`🎯 Socket handler initialized successfully with POST & SHARE events`);
 // };
 
 // export default socketHandler;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -529,9 +500,16 @@ import Wallpaper from "./models/Wallpaper.js";
 import Share from "./models/Share.js";
 import Post from "./models/Post.js"; // ADDED
 import { verifySocketToken } from "./middlewares/auth-middleware.js";
-import mongoose from "mongoose"
 
-// import { verifySocketToken } from "../middlewares/auth-middleware.js";
+// import Message from "./models/Message.js";
+// import User from "./models/User.js";
+// import Group from "./models/Group.js";
+// import Wallpaper from "./models/Wallpaper.js";
+// import Share from "./models/Share.js";
+// import Post from "./models/Post.js";
+import Notification from "./models/Notification.js"; // ADDED
+// import { verifySocketToken } from "./middlewares/auth-middleware.js";
+import mongoose from "mongoose"
 
 const onlineUsers = new Map();      // userId => Set(socketIds)
 const tempToRealMap = new Map();   // clientTempId => realId
@@ -545,6 +523,115 @@ const validateUser = async (userId) => {
     return await User.findById(userId);
   } catch (err) {
     return null;
+  }
+};
+
+// NEW: Notification helper functions
+const createNotification = async (data) => {
+  try {
+    const { 
+      type, 
+      fromUser, 
+      toUser, 
+      postId, 
+      messageId, 
+      shareId, 
+      commentId,
+      reelId,
+      extraData = {} 
+    } = data;
+
+    if (!type || !fromUser || !toUser) {
+      console.error("❌ [createNotification] Missing required fields");
+      return null;
+    }
+
+    // Don't create notification if user is notifying themselves
+    if (String(fromUser) === String(toUser)) {
+      return null;
+    }
+
+    const notification = await Notification.create({
+      type,
+      sender: fromUser,
+      receiver: toUser,
+      post: postId,
+      message: messageId,
+      share: shareId,
+      comment: commentId,
+      reel: reelId,
+      text: extraData.text || "",
+      read: false
+    });
+
+    await notification.populate("sender", "username profilePic");
+    if (postId) await notification.populate("post", "caption image");
+    if (messageId) await notification.populate("message", "content");
+    if (shareId) await notification.populate("share", "message");
+    if (commentId) await notification.populate("comment", "text");
+    if (reelId) await notification.populate("reel", "caption video");
+
+    return notification;
+  } catch (error) {
+    console.error("❌ [createNotification] Error:", error);
+    return null;
+  }
+};
+
+// NEW: Emit notification to user
+const emitNotification = async (io, notification, toUserId) => {
+  try {
+    if (!notification) return;
+
+    const notificationData = {
+      id: notification._id.toString(),
+      type: notification.type,
+      sender: {
+        id: notification.sender._id.toString(),
+        username: notification.sender.username,
+        avatar: notification.sender.profilePic,
+      },
+      receiver: notification.receiver.toString(),
+      post: notification.post ? {
+        id: notification.post._id.toString(),
+        caption: notification.post.caption,
+        image: notification.post.image,
+      } : null,
+      message: notification.message ? {
+        id: notification.message._id.toString(),
+        content: notification.message.content,
+      } : null,
+      share: notification.share ? {
+        id: notification.share._id.toString(),
+        message: notification.share.message,
+      } : null,
+      comment: notification.comment ? {
+        id: notification.comment._id.toString(),
+        text: notification.comment.text,
+      } : null,
+      reel: notification.reel ? {
+        id: notification.reel._id.toString(),
+        caption: notification.reel.caption,
+      } : null,
+      text: notification.text || "",
+      read: notification.read,
+      createdAt: notification.createdAt,
+    };
+
+    // Emit to specific user
+    io.to(toUserId).emit("new-notification", notificationData);
+    
+    // Also update notification count
+    const unreadCount = await Notification.countDocuments({ 
+      receiver: toUserId, 
+      read: false 
+    });
+    
+    io.to(toUserId).emit("notification-count", { count: unreadCount });
+
+    console.log(`🔔 [emitNotification] Notification sent to ${toUserId}: ${notification.type}`);
+  } catch (error) {
+    console.error("❌ [emitNotification] Error:", error);
   }
 };
 
@@ -621,6 +708,17 @@ const socketHandler = (io) => {
     // Join room by userId so we can emit to the user easily
     socket.join(userId);
 
+    // Send initial notification count
+    try {
+      const unreadCount = await Notification.countDocuments({ 
+        receiver: userId, 
+        read: false 
+      });
+      io.to(userId).emit("notification-count", { count: unreadCount });
+    } catch (error) {
+      console.error("❌ [Connection] Error fetching notification count:", error);
+    }
+
     try {
       await User.findByIdAndUpdate(userId, { isOnline: true, lastActive: new Date() });
       io.emit("user-status", { userId, isOnline: true });
@@ -629,9 +727,89 @@ const socketHandler = (io) => {
     }
 
     // -------------------------
-    // POST EVENTS
+    // NOTIFICATION EVENTS
     // -------------------------
-   socket.on("createPost", async ({ caption, location, image, tempId }) => {
+    socket.on("fetch-notifications", async () => {
+      console.log(`📋 [fetch-notifications] Request from: ${userId}`);
+      try {
+        const notifications = await Notification.find({ receiver: userId })
+          .populate("sender", "username profilePic")
+          .populate("post", "caption image")
+          .populate("reel", "caption video")
+          .populate("comment", "text")
+          .sort({ createdAt: -1 })
+          .limit(50)
+          .lean();
+
+        const formattedNotifications = notifications.map(notif => ({
+          id: notif._id.toString(),
+          type: notif.type,
+          sender: {
+            id: notif.sender._id.toString(),
+            username: notif.sender.username,
+            avatar: notif.sender.profilePic,
+          },
+          post: notif.post ? {
+            id: notif.post._id.toString(),
+            caption: notif.post.caption,
+            image: notif.post.image,
+          } : null,
+          reel: notif.reel ? {
+            id: notif.reel._id.toString(),
+            caption: notif.reel.caption,
+          } : null,
+          comment: notif.comment ? {
+            id: notif.comment._id.toString(),
+            text: notif.comment.text,
+          } : null,
+          text: notif.text,
+          read: notif.read,
+          createdAt: notif.createdAt,
+        }));
+
+        io.to(userId).emit("notifications-list", formattedNotifications);
+      } catch (err) {
+        console.error("❌ [fetch-notifications] Error:", err);
+      }
+    });
+
+    socket.on("mark-notification-read", async ({ notificationId }) => {
+      console.log(`📖 [mark-notification-read] User ${userId} marking notification ${notificationId} as read`);
+      try {
+        await Notification.findByIdAndUpdate(notificationId, { read: true });
+        
+        // Update count
+        const unreadCount = await Notification.countDocuments({ 
+          receiver: userId, 
+          read: false 
+        });
+        io.to(userId).emit("notification-count", { count: unreadCount });
+        
+        io.to(userId).emit("notification-marked-read", { notificationId });
+      } catch (err) {
+        console.error("❌ [mark-notification-read] Error:", err);
+      }
+    });
+
+    socket.on("mark-all-notifications-read", async () => {
+      console.log(`📖 [mark-all-notifications-read] User ${userId} marking all as read`);
+      try {
+        await Notification.updateMany(
+          { receiver: userId, read: false },
+          { read: true }
+        );
+        
+        io.to(userId).emit("notification-count", { count: 0 });
+        io.to(userId).emit("all-notifications-marked-read");
+      } catch (err) {
+        console.error("❌ [mark-all-notifications-read] Error:", err);
+      }
+    });
+
+    // -------------------------
+    // POST EVENTS WITH NOTIFICATIONS
+    // -------------------------
+    socket.on("createPost", async ({ caption, location, image, tempId }) => {
       console.log(`📸 [createPost] ${username} creating post`);
       try {
         if (!caption?.trim()) {
@@ -647,7 +825,7 @@ const socketHandler = (io) => {
           owner: userId,
           caption: caption.trim(),
           location: location || "",
-          image: image || null, // e.g., "/uploads/abc123.png"
+          image: image || null,
         });
 
         await post.populate("owner", "username profilePic");
@@ -692,7 +870,7 @@ const socketHandler = (io) => {
           return io.to(socket.id).emit("like-error", { postId, error: "Invalid post ID" });
         }
 
-        const post = await Post.findById(postId);
+        const post = await Post.findById(postId).populate("owner");
         if (!post) {
           return io.to(socket.id).emit("like-error", { postId, error: "Post not found" });
         }
@@ -724,6 +902,22 @@ const socketHandler = (io) => {
         };
 
         io.emit("postLiked", likeData);
+
+        // 🔔 SEND NOTIFICATION FOR LIKE
+        if (!isLiked && String(post.owner._id) !== String(likerId)) {
+          const likerUser = await User.findById(likerId);
+          const notification = await createNotification({
+            type: "LIKE_POST",
+            fromUser: likerId,
+            toUser: post.owner._id,
+            postId: postId,
+            extraData: {
+              text: `${likerUser.username} liked your post`
+            }
+          });
+          await emitNotification(io, notification, post.owner._id.toString());
+        }
+
         console.log(`✅ [likePost] Post ${postId} liked by ${likerId}, likes: ${updatedPost.likesCount}`);
       } catch (err) {
         console.error("❌ [likePost] ERROR:", err);
@@ -741,7 +935,7 @@ const socketHandler = (io) => {
           return io.to(socket.id).emit("comment-error", { tempId, error: "Comment text is required" });
         }
 
-        const post = await Post.findById(postId);
+        const post = await Post.findById(postId).populate("owner");
         if (!post) {
           return io.to(socket.id).emit("comment-error", { tempId, error: "Post not found" });
         }
@@ -778,6 +972,21 @@ const socketHandler = (io) => {
 
         io.emit("postCommented", { postId, comment: commentData });
         io.to(socket.id).emit("comment-added", { tempId, realId: addedComment._id.toString() });
+
+        // 🔔 SEND NOTIFICATION FOR COMMENT
+        if (String(post.owner._id) !== String(userId)) {
+          const notification = await createNotification({
+            type: "COMMENT_POST",
+            fromUser: userId,
+            toUser: post.owner._id,
+            postId: postId,
+            commentId: addedComment._id,
+            extraData: {
+              text: `${username} commented: "${comment.trim()}"`
+            }
+          });
+          await emitNotification(io, notification, post.owner._id.toString());
+        }
 
         console.log(`✅ [commentOnPost] Comment added to post ${postId} by ${userId}`);
       } catch (err) {
@@ -845,7 +1054,7 @@ const socketHandler = (io) => {
     });
 
     // -------------------------
-    // 1-1 CHAT EVENTS
+    // 1-1 CHAT EVENTS WITH NOTIFICATIONS
     // -------------------------
     socket.on("fetch-chatlist", async () => {
       console.log(`📋 [fetch-chatlist] Request from: ${userId}`);
@@ -895,10 +1104,145 @@ const socketHandler = (io) => {
         io.to(receiver).emit("new-message", messageToEmit);
         io.to(socket.id).emit("message-sent", { tempId, realId: msg._id });
 
+        // 🔔 SEND NOTIFICATION FOR MESSAGE
+        const notification = await createNotification({
+          type: "MESSAGE",
+          fromUser: userId,
+          toUser: receiver,
+          messageId: msg._id,
+          extraData: {
+            text: `${username} sent you a message`
+          }
+        });
+        await emitNotification(io, notification, receiver);
+
         console.log(`✅ [send-message] Message sent: ${msg._id}`);
       } catch (err) {
         console.error(`❌ [send-message] Error:`, err);
         io.to(socket.id).emit("message-error", { tempId, error: err.message });
+      }
+    });
+
+    // -------------------------
+    // FOLLOW EVENTS WITH NOTIFICATIONS
+    // -------------------------
+    socket.on("follow-user", async ({ targetUserId }) => {
+      console.log(`👥 [follow-user] User ${userId} following ${targetUserId}`);
+      try {
+        if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
+          return io.to(socket.id).emit("follow-error", { error: "Invalid user ID" });
+        }
+
+        if (userId === targetUserId) {
+          return io.to(socket.id).emit("follow-error", { error: "Cannot follow yourself" });
+        }
+
+        const targetUser = await User.findById(targetUserId);
+        if (!targetUser) {
+          return io.to(socket.id).emit("follow-error", { error: "User not found" });
+        }
+
+        const currentUser = await User.findById(userId);
+
+        // Check if already following
+        const isFollowing = currentUser.following.includes(targetUserId);
+        
+        if (isFollowing) {
+          // Unfollow
+          await User.findByIdAndUpdate(userId, { $pull: { following: targetUserId } });
+          await User.findByIdAndUpdate(targetUserId, { $pull: { followers: userId } });
+          
+          io.emit("user-unfollowed", { followerId: userId, targetUserId });
+        } else {
+          // Follow
+          await User.findByIdAndUpdate(userId, { $addToSet: { following: targetUserId } });
+          await User.findByIdAndUpdate(targetUserId, { $addToSet: { followers: userId } });
+          
+          io.emit("user-followed", { followerId: userId, targetUserId });
+
+          // 🔔 SEND NOTIFICATION FOR FOLLOW
+          const notification = await createNotification({
+            type: "FOLLOW_REQUEST",
+            fromUser: userId,
+            toUser: targetUserId,
+            extraData: {
+              text: `${username} started following you`
+            }
+          });
+          await emitNotification(io, notification, targetUserId);
+        }
+
+        console.log(`✅ [follow-user] ${isFollowing ? 'Unfollowed' : 'Followed'} ${targetUserId}`);
+      } catch (err) {
+        console.error("❌ [follow-user] ERROR:", err);
+        io.to(socket.id).emit("follow-error", { error: err.message });
+      }
+    });
+
+    // -------------------------
+    // REEL EVENTS WITH NOTIFICATIONS
+    // -------------------------
+    socket.on("likeReel", async ({ reelId, userId: likerId }) => {
+      console.log(`❤️ [likeReel] User ${likerId} liking reel ${reelId}`);
+      try {
+        // Assuming you have a Reel model similar to Post
+        // const reel = await Reel.findById(reelId).populate("owner");
+        
+        // For now, we'll emit a placeholder event
+        io.emit("reelLiked", { reelId, likerId });
+
+        // 🔔 SEND NOTIFICATION FOR REEL LIKE (placeholder)
+        // const notification = await createNotification({
+        //   type: "REEL_LIKE",
+        //   fromUser: likerId,
+        //   toUser: reel.owner._id,
+        //   reelId: reelId,
+        //   extraData: {
+        //     text: `${username} liked your reel`
+        //   }
+        // });
+        // await emitNotification(io, notification, reel.owner._id.toString());
+
+        console.log(`✅ [likeReel] Reel ${reelId} liked by ${likerId}`);
+      } catch (err) {
+        console.error("❌ [likeReel] ERROR:", err);
+        io.to(socket.id).emit("reel-like-error", { reelId, error: err.message });
+      }
+    });
+
+    socket.on("commentOnReel", async ({ reelId, comment, tempId }) => {
+      console.log(`💬 [commentOnReel] User ${userId} commenting on reel ${reelId}`);
+      try {
+        // Assuming you have a Reel model with comments
+        // const reel = await Reel.findById(reelId).populate("owner");
+        
+        // For now, we'll emit a placeholder event
+        const commentData = {
+          id: tempId || new mongoose.Types.ObjectId().toString(),
+          user: { id: userId, username: username },
+          text: comment,
+          createdAt: new Date(),
+        };
+
+        io.emit("reelCommented", { reelId, comment: commentData });
+        io.to(socket.id).emit("reel-comment-added", { tempId, realId: commentData.id });
+
+        // 🔔 SEND NOTIFICATION FOR REEL COMMENT (placeholder)
+        // const notification = await createNotification({
+        //   type: "REEL_COMMENT",
+        //   fromUser: userId,
+        //   toUser: reel.owner._id,
+        //   reelId: reelId,
+        //   extraData: {
+        //     text: `${username} commented on your reel`
+        //   }
+        // });
+        // await emitNotification(io, notification, reel.owner._id.toString());
+
+        console.log(`✅ [commentOnReel] Comment added to reel ${reelId} by ${userId}`);
+      } catch (err) {
+        console.error("❌ [commentOnReel] ERROR:", err);
+        io.to(socket.id).emit("reel-comment-error", { tempId, error: err.message });
       }
     });
 
@@ -926,11 +1270,9 @@ const socketHandler = (io) => {
     });
 
     // -------------------------
-    // SHARE EVENTS (send_share)
-    // Saves Share in DB and emits to receiver in real-time
+    // SHARE EVENTS WITH NOTIFICATIONS
     // -------------------------
     socket.on("join_user", (joinId) => {
-      // Allow clients to explicitly join rooms (optional)
       try {
         if (!joinId) return;
         socket.join(joinId);
@@ -982,6 +1324,19 @@ const socketHandler = (io) => {
         // Acknowledge sender
         io.to(socket.id).emit("share_sent", { share: shareDoc });
 
+        // 🔔 SEND NOTIFICATION FOR SHARE
+        const notification = await createNotification({
+          type: "MENTION", // Using MENTION for shares
+          fromUser: senderId,
+          toUser: receiverId,
+          shareId: shareDoc._id,
+          postId: postId,
+          extraData: {
+            text: `${username} shared a post with you`
+          }
+        });
+        await emitNotification(io, notification, receiverId);
+
         console.log(`✅ [send_share] Share saved ${shareDoc._id} from ${senderId} -> ${receiverId}`);
       } catch (err) {
         console.error("❌ [send_share] ERROR:", err);
@@ -1005,7 +1360,7 @@ const socketHandler = (io) => {
     });
   });
 
-  console.log(`🎯 Socket handler initialized successfully with POST & SHARE events`);
+  console.log(`🎯 Socket handler initialized successfully with REAL-TIME NOTIFICATIONS for all events`);
 };
 
 export default socketHandler;

@@ -90,7 +90,7 @@ app.use("/api/contest", userRoutes);
 app.use("/api/profile", userRoutes);
 app.use("/api/reel", userRoutes);
 app.use("/api/share", userRoutes);
-// app.use("/api/notification", userRoutes); // Uncomment when ready
+app.use("/api/notification", userRoutes); // Uncomment when ready
 
 // -------------------- Socket.IO Setup --------------------
 const server = http.createServer(app);

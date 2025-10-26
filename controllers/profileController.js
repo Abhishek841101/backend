@@ -4,6 +4,7 @@
 import User from "../models/User.js";
 import Follow from "../models/Follow.js";
 import Message from "../models/Message.js";
+// import Post from "../models/Post.js";
 // =====================
 // GET PROFILE
 // =====================
@@ -66,6 +67,10 @@ export const getProfile = async (req, res) => {
     res.status(500).json({ error: { message: error.message } });
   }
 };
+
+
+
+
 
 // =====================
 // FOLLOW USER

@@ -13,7 +13,7 @@ import {
   unfollowUser,
   getAllUsers,
 } from "../controllers/profileController.js";
-
+import * as notificationController from "../controllers/notificationController.js";
 import checkUserAuth from "../middlewares/auth-middleware.js";
 import {
   sharePost,
@@ -90,6 +90,12 @@ router.post("/groups/:groupId/wallpaper", checkUserAuth, chatController.setGroup
 router.get("/groups/:groupId/wallpaper", checkUserAuth, chatController.getGroupWallpaper);
 router.get("/groups/:groupId/unread-summary", checkUserAuth, chatController.getGroupUnreadSummary);
 router.post("/groups/:groupId/mark-seen", checkUserAuth, chatController.markGroupMessagesAsRead);
+
+// NOTIFICATIONS ROUTES
+// =========================
+router.get("/notifications", checkUserAuth, notificationController.getNotifications);
+router.post("/notifications/mark-read/:notificationId", checkUserAuth, notificationController.markAsRead);
+router.post("/notifications/mark-all-read", checkUserAuth, notificationController.markAllAsRead);
 
 // =========================
 // CONTEST ROUTES
