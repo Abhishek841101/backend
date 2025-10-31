@@ -457,10 +457,55 @@ const updatePost = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to update post" });
   }
 };
+const getMyPosts = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+    const posts = await Post.find({ owner: userId })
+      .sort({ createdAt: -1 })
+      .populate("owner", "username profilePic")
+      .populate("comments.user", "username profilePic")
+      .lean();
+
+    const formattedPosts = posts.map((post) => ({
+      id: post._id.toString(),
+      user: {
+        id: post.owner._id.toString(),
+        username: post.owner.username,
+        avatar: post.owner.profilePic,
+      },
+      media: post.media ? `${baseUrl}${post.media}` : null,
+      mediaType: post.mediaType || null,
+      caption: post.caption,
+      location: post.location,
+      likes: post.likes?.length || 0,
+      liked: post.likes?.some((like) => like.toString() === userId.toString()) || false,
+      comments:
+        post.comments?.map((comment) => ({
+          id: comment._id.toString(),
+          user: {
+            id: comment.user._id.toString(),
+            username: comment.user.username,
+          },
+          text: comment.text,
+          createdAt: comment.createdAt,
+        })) || [],
+      createdAt: post.createdAt,
+    }));
+
+    res.json({ success: true, posts: formattedPosts });
+  } catch (error) {
+    console.error("❌ [getMyPosts] Error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch user posts" });
+  }
+};
+
 
 export default {
   uploadPost,
   getPosts,
+   getMyPosts,
   getPostById,
   deletePost,
   likePost,

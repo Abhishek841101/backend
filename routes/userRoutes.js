@@ -7,11 +7,21 @@ import PostController from "../controllers/PostController.js";
 import * as contestController from "../controllers/contestController.js";
 import * as chatController from "../controllers/chatController.js";
 import * as reelsController from "../controllers/reelsController.js"; // ✅ import as object
+// import {
+//   getProfile,
+//   followUser,
+//   unfollowUser,
+//   getAllUsers,
+// } from "../controllers/profileController.js";
 import {
   getProfile,
   followUser,
   unfollowUser,
-  getAllUsers,
+  getPendingFollowRequests,
+  acceptFollowRequest,
+  declineFollowRequest,
+  cancelFollowRequest,
+  getAllUsers
 } from "../controllers/profileController.js";
 
 import * as notificationController from "../controllers/notificationController.js";
@@ -45,6 +55,14 @@ router.get("/all-users", checkUserAuth, getAllUsers);
 router.get("/profile/:username", checkUserAuth, getProfile);
 router.post("/profile/:username/follow", checkUserAuth, followUser);
 router.delete("/profile/:username/follow", checkUserAuth, unfollowUser);
+// Follow-Requests
+// Follow-Requests
+router.get("/follow/requests", checkUserAuth, getPendingFollowRequests);
+router.put("/follow/accept/:username", checkUserAuth, acceptFollowRequest);
+router.delete("/follow/decline/:username", checkUserAuth, declineFollowRequest);
+router.delete("/cancel/:username", checkUserAuth, cancelFollowRequest);
+
+
 
 // =========================
 // POST ROUTES
@@ -58,6 +76,7 @@ router.post("/posts/:postId/comment", checkUserAuth, PostController.addComment);
 router.delete("/posts/:postId/comments/:commentId", checkUserAuth, PostController.deleteComment);
 router.get("/posts/user/:userId", checkUserAuth, PostController.getUserPosts);
 router.put("/posts/:postId", checkUserAuth, PostController.updatePost);
+router.get("/posts/me", checkUserAuth, PostController.getMyPosts);
 
 // =========================
 // CHAT ROUTES
@@ -117,9 +136,23 @@ router.get("/contests/entry/leaderboard/:contestId", contestController.getLeader
 // REELS ROUTES
 // =========================
 router.get("/reels", reelsController.getReels);
-router.post("/upload", uploadMiddleware.single("video"), reelsController.uploadReel);
+router.post(
+  "/upload",
+  checkUserAuth,
+  uploadMiddleware.single("video"),
+  reelsController.uploadReel
+);
+// router.post("/upload", uploadMiddleware.single("video"), reelsController.uploadReel);
 router.post("/reels/:id/like", checkUserAuth, reelsController.likeReel);
 router.post("/reels/:id/comment", checkUserAuth, reelsController.commentReel);
+router.post("/reels/:id/like", checkUserAuth, reelsController.likeReel);
+router.post("/reels/:id/unlike", checkUserAuth, reelsController.unlikeReel);
+router.post("/reels/:id/comment", checkUserAuth, reelsController.commentReel);
+router.get("/reels/me", checkUserAuth, reelsController.getMyReels);
+router.delete("/reels/:id", checkUserAuth, reelsController.deleteReel);
+router.post("/reels/:id/save", checkUserAuth, reelsController.saveReel);
+router.post("/reels/:id/unsave", checkUserAuth, reelsController.unsaveReel);
+router.get("/reels/saved", checkUserAuth, reelsController.getSavedReels);
 
 // =========================
 // SHARE ROUTES
