@@ -1,15 +1,8 @@
-
-
 import User from "../models/User.js";
 import Message from "../models/Message.js";
 import Wallpaper from "../models/Wallpaper.js";
 import Group from "../models/Group.js";
 
-// =========================
-// 1-1 CHAT APIS
-// =========================
-
-// Get all users except self
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.find({ _id: { $ne: req.user._id } }).select("-password");
@@ -19,8 +12,6 @@ export const getAllUsers = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch users." });
   }
 };
-
-// Get messages between two users
 export const getMessagesBetweenUsers = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -55,7 +46,6 @@ export const getMessagesBetweenUsers = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
 // Send message
 export const sendMessage = async (req, res) => {
   try {

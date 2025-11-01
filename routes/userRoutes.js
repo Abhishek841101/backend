@@ -7,12 +7,8 @@ import PostController from "../controllers/PostController.js";
 import * as contestController from "../controllers/contestController.js";
 import * as chatController from "../controllers/chatController.js";
 import * as reelsController from "../controllers/reelsController.js"; // ✅ import as object
-// import {
-//   getProfile,
-//   followUser,
-//   unfollowUser,
-//   getAllUsers,
-// } from "../controllers/profileController.js";
+
+import * as mediaController from "../controllers/mediaController.js";
 import {
   getProfile,
   followUser,
@@ -160,5 +156,24 @@ router.get("/reels/saved", checkUserAuth, reelsController.getSavedReels);
 router.post("/share", checkUserAuth, sharePost);
 router.get("/shares/received/:userId", checkUserAuth, getReceivedShares);
 router.get("/shares/sent/:userId", checkUserAuth, getSentShares);
+
+
+//media routes
+router.post(
+  "/media/upload",
+  checkUserAuth,
+  uploadMiddleware.fields([
+    { name: "media", maxCount: 1 },      
+    { name: "thumbnail", maxCount: 1 },  
+  ]),
+  mediaController.uploadMedia
+);
+router.get("/media", checkUserAuth, mediaController.getAllMedia);
+router.get("/media/:id", checkUserAuth, mediaController.getMediaById);
+router.delete("/media/:id", checkUserAuth, mediaController.deleteMedia);
+router.put("/media/:id", checkUserAuth, mediaController.updateMedia);
+router.post("/media/:id/like", checkUserAuth, mediaController.likeMedia);
+router.post("/media/:id/comment", checkUserAuth, mediaController.commentMedia);
+router.get("/media/me", checkUserAuth, mediaController.getMyMedia);
 
 export default router;

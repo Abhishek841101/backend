@@ -14,12 +14,6 @@ const getMediaType = (filename) => {
   return null;
 };
 
-
-
-// ================= Upload Post =================
-
-
-
 // ================= Get All Posts =================
 const getPosts = async (req, res) => {
   try {
