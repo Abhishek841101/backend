@@ -12,6 +12,7 @@ export const getAllUsers = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch users." });
   }
 };
+
 export const getMessagesBetweenUsers = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -32,6 +33,7 @@ export const getMessagesBetweenUsers = async (req, res) => {
       receiver: String(msg.receiver?._id),
       content: msg.content || "",
       image: msg.image || null,
+      audio: msg.audio || null,
       timestamp: msg.createdAt,
       readBy: (msg.readBy || []).map(u => String(u)),
       reactions: msg.reactions || [],
@@ -47,16 +49,56 @@ export const getMessagesBetweenUsers = async (req, res) => {
   }
 };
 // Send message
+// export const sendMessage = async (req, res) => {
+//   try {
+//     const { receiverId, content, image } = req.body;
+//     if (!receiverId) return res.status(400).json({ message: "receiverId is required" });
+
+//     const newMsg = await Message.create({
+//       sender: req.user._id,
+//       receiver: receiverId,
+//       content: content || "",
+//       image: image || null,
+//       readBy: [String(req.user._id)],
+//       reactions: [],
+//     });
+
+//     const populated = await newMsg.populate("sender", "username").populate("receiver", "username");
+
+//     res.status(201).json({
+//       _id: populated._id,
+//       sender: String(populated.sender._id),
+//       receiver: String(populated.receiver._id),
+//       content: populated.content,
+//       image: populated.image || null,
+//       timestamp: populated.createdAt,
+//       readBy: (populated.readBy || []).map(u => String(u)),
+//       reactions: populated.reactions || [],
+//       edited: populated.edited || false,
+//       senderUsername: populated.sender.username,
+//       receiverUsername: populated.receiver.username,
+//     });
+//   } catch (err) {
+//     console.error("sendMessage error:", err);
+//     res.status(500).json({ message: "Error sending message", error: err.message });
+//   }
+// };
+
+
 export const sendMessage = async (req, res) => {
   try {
     const { receiverId, content, image } = req.body;
-    if (!receiverId) return res.status(400).json({ message: "receiverId is required" });
+    const audio = req.file ? `/uploads/audio/${req.file.filename}` : null;
+
+    if (!receiverId)
+      return res.status(400).json({ message: "receiverId is required" });
 
     const newMsg = await Message.create({
       sender: req.user._id,
       receiver: receiverId,
       content: content || "",
       image: image || null,
+      audio,
       readBy: [String(req.user._id)],
       reactions: [],
     });
@@ -69,6 +111,7 @@ export const sendMessage = async (req, res) => {
       receiver: String(populated.receiver._id),
       content: populated.content,
       image: populated.image || null,
+      audio,
       timestamp: populated.createdAt,
       readBy: (populated.readBy || []).map(u => String(u)),
       reactions: populated.reactions || [],
@@ -76,11 +119,13 @@ export const sendMessage = async (req, res) => {
       senderUsername: populated.sender.username,
       receiverUsername: populated.receiver.username,
     });
+
   } catch (err) {
     console.error("sendMessage error:", err);
     res.status(500).json({ message: "Error sending message", error: err.message });
   }
 };
+
 
 // Edit message
 export const editMessage = async (req, res) => {
@@ -343,6 +388,8 @@ export const getGroupMessages = async (req, res) => {
 export const sendGroupMessage = async (req, res) => {
   try {
     const { groupId, content, image } = req.body;
+    const audio = req.file ? `/uploads/audio/${req.file.filename}` : null;
+
     const group = await Group.findById(groupId);
     if (!group) return res.status(404).json({ message: "Group not found" });
 
@@ -351,6 +398,7 @@ export const sendGroupMessage = async (req, res) => {
       group: groupId,
       content: content || "",
       image: image || null,
+      audio,
       readBy: [String(req.user._id)],
       reactions: [],
     });
@@ -362,6 +410,7 @@ export const sendGroupMessage = async (req, res) => {
       sender: String(populated.sender._id),
       content: populated.content,
       image: populated.image || null,
+      audio,
       timestamp: populated.createdAt,
       readBy: (populated.readBy || []).map(u => String(u)),
       reactions: populated.reactions || [],
@@ -369,9 +418,10 @@ export const sendGroupMessage = async (req, res) => {
       senderUsername: populated.sender.username,
       groupId,
     });
+
   } catch (err) {
     console.error("sendGroupMessage error:", err);
-    res.status(500).json({ message: "Error sending message", error: err.message });
+    res.status(500).json({ message: "Error sending group message", error: err.message });
   }
 };
 

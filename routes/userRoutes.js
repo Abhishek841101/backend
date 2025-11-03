@@ -77,9 +77,19 @@ router.get("/posts/me", checkUserAuth, PostController.getMyPosts);
 // =========================
 // CHAT ROUTES
 // =========================
+
 router.get("/chat/users", checkUserAuth, chatController.getAllUsers);
 router.get("/messages/:userId", checkUserAuth, chatController.getMessagesBetweenUsers);
-router.post("/messages/send", checkUserAuth, chatController.sendMessage);
+// router.post("/messages/send", checkUserAuth, chatController.sendMessage);
+router.post(
+  "/messages/send",
+  checkUserAuth,
+  uploadMiddleware.fields([
+    { name: "image", maxCount: 2 },
+    { name: "audio", maxCount: 1 },
+  ]),
+  chatController.sendMessage
+);
 router.put("/messages/edit/:messageId", checkUserAuth, chatController.editMessage);
 router.post("/messages/react/:messageId", checkUserAuth, chatController.toggleReaction);
 router.get("/chat/unread-summary", checkUserAuth, chatController.getUnreadSummary);
@@ -96,7 +106,16 @@ router.post("/groups/create", checkUserAuth, chatController.createGroup);
 router.get("/groups", checkUserAuth, chatController.getGroups);
 router.get("/groups/:groupId", checkUserAuth, chatController.getGroup);
 router.get("/groups/:groupId/messages", checkUserAuth, chatController.getGroupMessages);
-router.post("/groups/:groupId/send", checkUserAuth, chatController.sendGroupMessage);
+// router.post("/groups/:groupId/send", checkUserAuth, chatController.sendGroupMessage);
+router.post(
+  "/groups/:groupId/send",
+  checkUserAuth,
+  uploadMiddleware.fields([
+    { name: "image", maxCount: 1 },
+    { name: "audio", maxCount: 1 },
+  ]),
+  chatController.sendGroupMessage
+);
 router.put("/groups/:groupId/edit/:messageId", checkUserAuth, chatController.editGroupMessage);
 router.post("/groups/:groupId/react/:messageId", checkUserAuth, chatController.toggleGroupReaction);
 router.post("/groups/:groupId/add-member", checkUserAuth, chatController.addGroupMember);

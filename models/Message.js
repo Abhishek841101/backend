@@ -11,7 +11,7 @@ const messageSchema = new mongoose.Schema(
 
     content: { type: String, default: "" },
     image: { type: String, default: null },
-
+ audio: { type: String, default: null },
     edited: { type: Boolean, default: false },
     editedAt: { type: Date, default: null },
 
